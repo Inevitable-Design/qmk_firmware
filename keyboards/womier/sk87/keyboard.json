@@ -49,6 +49,9 @@
         },
         {
             "key": "KC_2G4"
+        },
+        {
+            "key": "KC_BAT"
         }
     ],
     "matrix_pins": {

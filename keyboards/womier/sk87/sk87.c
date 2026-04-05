@@ -191,6 +191,10 @@ bool process_record_wls(uint16_t keycode, keyrecord_t *record) {
 }
 #endif
 
+#ifdef WIRELESS_ENABLE
+static bool show_battery = false;
+#endif
+
 bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
 
     if (process_record_user(keycode, record) != true) {
@@ -204,6 +208,11 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
 #endif
 
     switch (keycode) {
+#ifdef WIRELESS_ENABLE
+        case KC_BAT:
+            show_battery = record->event.pressed;
+            return false;
+#endif
         default:
             return true;
     }
@@ -327,6 +336,31 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
 
 #    ifdef WIRELESS_ENABLE
     rgb_matrix_wls_indicator();
+
+    // Battery indicator on F-row (LED indices 1-10 = F1-F10)
+    // Displays as a bar: green > 60%, yellow > 20%, red <= 20%
+    if (show_battery) {
+        uint8_t bat = *md_getp_bat();
+        uint8_t segments = (bat + 9) / 10; // 0-10 segments
+        if (segments > 10) segments = 10;
+
+        for (uint8_t i = 0; i < 10; i++) {
+            uint8_t led = i + 1; // LED indices 1-10 (F1-F10)
+            if (led < led_min || led >= led_max) continue;
+
+            if (i < segments) {
+                if (bat > 60) {
+                    rgb_matrix_set_color(led, 0x00, 0x77, 0x00); // green
+                } else if (bat > 20) {
+                    rgb_matrix_set_color(led, 0x77, 0x77, 0x00); // yellow
+                } else {
+                    rgb_matrix_set_color(led, 0x77, 0x00, 0x00); // red
+                }
+            } else {
+                rgb_matrix_set_color(led, 0x00, 0x00, 0x00); // off
+            }
+        }
+    }
 #    endif
 
     return true;
