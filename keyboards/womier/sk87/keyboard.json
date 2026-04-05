@@ -3,6 +3,7 @@
     "keyboard_name": "SK87",
     "maintainer": "JonyLee@HFD",
     "bootloader": "wb32-dfu",
+    "modules": ["signalrgb"],
     "bootmagic": {
         "matrix": [0, 0]
     },
@@ -21,10 +22,11 @@
         "deferred_exec": true,
         "extrakey": true,
         "haptic": false,
-        "mousekey": true,
+        "mousekey": false,
         "nkro": true,
         "rgb_matrix": true,
-        "rgblight": false
+        "rgblight": false,
+        "via": true
     },
     "keycodes": [
         {
