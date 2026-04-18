@@ -193,6 +193,16 @@ bool process_record_wls(uint16_t keycode, keyrecord_t *record) {
 
 #ifdef WIRELESS_ENABLE
 static bool show_battery = false;
+
+// Prevent deep sleep while on USB. On USB the host can suspend at any time,
+// and our EXTI-based wake path does not restart the USB driver on resume
+// (wireless_devs_change(USB, USB) short-circuits when old==new), so after
+// a host sleep/wake cycle the keyboard can come back with no lights and
+// no input until a physical replug. USB also supplies power, so there is
+// no battery benefit to deep-sleeping it.
+bool lpwr_is_allow_timeout_hook(void) {
+    return wireless_get_current_devs() != DEVS_USB;
+}
 #endif
 
 bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
@@ -205,19 +215,14 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
     if (process_record_wls(keycode, record) != true) {
         return false;
     }
-#endif
 
-    switch (keycode) {
-#ifdef WIRELESS_ENABLE
-        case KC_BAT:
-            show_battery = record->event.pressed;
-            return false;
-#endif
-        default:
-            return true;
+    if (keycode == KC_BAT) {
+        show_battery = record->event.pressed;
+        return false;
     }
+#endif
 
-    return false;
+    return true;
 }
 
 #ifdef RGB_MATRIX_ENABLE
@@ -326,44 +331,49 @@ void rgb_matrix_wls_indicator(void) {
 
 bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
 
-    if (rgb_matrix_indicators_advanced_user(led_min, led_max) != true) {
-        return false;
-    }
+    bool continue_user_indicators = rgb_matrix_indicators_advanced_user(led_min, led_max);
 
-    if (host_keyboard_led_state().caps_lock) {
-        rgb_matrix_set_color(64, 0x77, 0x77, 0x77);
+    if (continue_user_indicators) {
+        if (host_keyboard_led_state().caps_lock) {
+            rgb_matrix_set_color(64, 0x77, 0x77, 0x77);
+        }
+
+#    ifdef WIRELESS_ENABLE
+        rgb_matrix_wls_indicator();
+#    endif
     }
 
 #    ifdef WIRELESS_ENABLE
-    rgb_matrix_wls_indicator();
-
-    // Battery indicator on F-row (LED indices 1-10 = F1-F10)
-    // Displays as a bar: green > 60%, yellow > 20%, red <= 20%
+    // Battery indicator on F-row (LED indices 1-10 = F1-F10). Painted last,
+    // unconditionally, so it wins over SignalRGB frames streamed via raw_hid
+    // — otherwise the bar flickers as HID packets race with the indicator pass.
+    // On USB the reading stays at the default 100 (md_inquire_bat only runs
+    // on wireless), so the bar effectively becomes a "held" smoke test there.
     if (show_battery) {
-        uint8_t bat = *md_getp_bat();
-        uint8_t segments = (bat + 9) / 10; // 0-10 segments
+        uint8_t bat      = *md_getp_bat();
+        uint8_t segments = (bat + 9) / 10;
         if (segments > 10) segments = 10;
 
         for (uint8_t i = 0; i < 10; i++) {
-            uint8_t led = i + 1; // LED indices 1-10 (F1-F10)
+            uint8_t led = i + 1;
             if (led < led_min || led >= led_max) continue;
 
             if (i < segments) {
                 if (bat > 60) {
-                    rgb_matrix_set_color(led, 0x00, 0x77, 0x00); // green
+                    rgb_matrix_set_color(led, 0x00, 0x77, 0x00);
                 } else if (bat > 20) {
-                    rgb_matrix_set_color(led, 0x77, 0x77, 0x00); // yellow
+                    rgb_matrix_set_color(led, 0x77, 0x77, 0x00);
                 } else {
-                    rgb_matrix_set_color(led, 0x77, 0x00, 0x00); // red
+                    rgb_matrix_set_color(led, 0x77, 0x00, 0x00);
                 }
             } else {
-                rgb_matrix_set_color(led, 0x00, 0x00, 0x00); // off
+                rgb_matrix_set_color(led, 0x00, 0x00, 0x00);
             }
         }
     }
 #    endif
 
-    return true;
+    return continue_user_indicators;
 }
 
 
@@ -484,11 +494,10 @@ void wireless_send_nkro(report_nkro_t *report) {
         memset(&temp_report_keyboard, 0, sizeof(temp_report_keyboard));
     }
 #endif
-    void wireless_task(void);
-    bool smsg_is_busy(void);
-    while(smsg_is_busy()) {
-        wireless_task();
-    }
+    // smsg_push serializes kb+nkro in order; the previous
+    // while(smsg_is_busy()) { wireless_task(); } spin was unsafe — it
+    // re-entered the UART pump from the keyboard report path and could
+    // hang if the module stopped ACK'ing.
     extern host_driver_t wireless_driver;
     wireless_driver.send_keyboard(&temp_report_keyboard);
     md_send_nkro(wls_report_nkro);
