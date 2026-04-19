@@ -31,6 +31,56 @@ This build is rebased onto the latest `qmk/qmk_firmware` master and includes the
 * **VIA support** — `via: true` in `keyboard.json`. Remap keys live via the VIA app.
 * **SignalRGB support** — Community module added at `modules/signalrgb`. Per-key RGB control from SignalRGB on PC.
 * **KEYBOARD_SHARED_EP** — Keyboard HID report shares an endpoint with NKRO/extrakey, freeing an endpoint for the RAW HID interface required by VIA and SignalRGB.
+* **Battery indicator** — Hold **Fn + Space** in wireless mode to show battery as a 10-LED bar on F1–F10 (green > 60%, yellow > 20%, red ≤ 20%).
+* **Snake minigame** — Play Snake on the LEDs (see below).
+
+### Fn-layer custom keycodes
+| Keycode      | Default binding | Effect                                                             |
+|--------------|-----------------|--------------------------------------------------------------------|
+| `KC_USB`     | Fn + 6          | Switch to USB transport                                            |
+| `KC_2G4`     | Fn + 5          | Switch to 2.4 GHz dongle transport (hold 3 s to pair)              |
+| `KC_BT1`–`KC_BT3` | Fn + 2/3/4 | Switch to Bluetooth slot 1/2/3 (hold 3 s to pair)                  |
+| `KC_BAT`     | Fn + Space      | Hold to display battery level on F1–F10                            |
+| `KC_SNAKE`   | Fn + S          | Toggle the snake minigame                                          |
+
+## Snake minigame
+
+A Snake game rendered on the keyboard's LEDs. Toggle with **Fn + S**.
+
+### Controls
+| Key          | Action                                                             |
+|--------------|--------------------------------------------------------------------|
+| **Fn + S**   | Enter or exit the game                                             |
+| **Arrows**   | Steer (180° reversals are rejected so you can't die instantly)     |
+| **ESC**      | Exit immediately                                                   |
+| **Any key**  | Restart after game over                                            |
+
+### Play field
+A 14 × 4 grid over the main keyboard area:
+
+```
+Row 0:  `   1  2  3  4  5  6  7  8  9  0  -  =  BSP
+Row 1:  Tab Q  W  E  R  T  Y  U  I  O  P  [  ]  \
+Row 2:  Cap A  S  D  F  G  H  J  K  L  ;  '  #  Ent
+Row 3:  LSh ISO Z X  C  V  B  N  M  ,  .  /  RSh [wall]
+```
+
+Walls (the edges + one cell at the end of the shift row) are instant death. Typing is suppressed while the game is running so arrow presses don't leak to the host; modifier and layer keys still work so **Fn + S** always exits.
+
+### Visual design
+* **Head** — bright cyan-green, painted last so it wins on self-overlap.
+* **Body** — linear green gradient, bright near the head fading to dim at the tail; a tiny cyan tint near the head gives the snake an obvious direction at a glance.
+* **Food** — red, slow breathing pulse (~1.2 s period).
+* **Game over** — head pulses orange/yellow (~0.6 s), body goes dim red.
+
+### State preservation
+On entry, the full RGB matrix state (enabled, mode, hue, saturation, value, speed) is snapshotted; on exit, all six are restored exactly, so your previous effect comes back intact. The snapshot only fires on the *inactive → active* transition — restart-after-death does **not** re-snapshot, preventing the saved state from getting overwritten with the game's blanked-out `SOLID_COLOR` state.
+
+### Known limitation
+If SignalRGB is actively streaming colors when you toggle the game, it can still paint over the game area via its `raw_hid_receive` callback. Pause SignalRGB on the PC for a clean display.
+
+### Post-flash
+After flashing new firmware that adds `KC_SNAKE`, tap **Fn + Esc** (`EE_CLR`) once. VIA caches numeric keycode IDs; the EEPROM reset makes it pick up the new keycode.
 
 ### Features removed
 * **Mouse keys** — Disabled (`mousekey: false`) to stay within the WB32FQ95's 3 USB endpoint limit. VIA/SignalRGB's RAW HID + Console endpoints require the budget that mousekey occupied.
@@ -49,8 +99,10 @@ This build is rebased onto the latest `qmk/qmk_firmware` master and includes the
 * `FORCE_NKRO` is deprecated — should be migrated to `NKRO_DEFAULT_ON` in a future update. Non-blocking.
 
 ### Firmware size
-| Build                | Size     |
-|----------------------|----------|
-| Original (default)   | 41.9 KB  |
-| + SignalRGB          | 47.1 KB  |
-| + SignalRGB + VIA    | 49.9 KB  |
+| Build                          | Size     |
+|--------------------------------|----------|
+| Original (default)             | 41.9 KB  |
+| + SignalRGB                    | 47.1 KB  |
+| + SignalRGB + VIA              | 49.9 KB  |
+| + Battery indicator            | 48.6 KB  |
+| + Battery + Snake minigame     | 50.2 KB  |

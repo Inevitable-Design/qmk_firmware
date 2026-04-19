@@ -205,6 +205,14 @@ bool lpwr_is_allow_timeout_hook(void) {
 }
 #endif
 
+#ifdef RGB_MATRIX_ENABLE
+// Snake game — implementation lives further down in the RGB_MATRIX_ENABLE block
+extern bool snake_active;
+void snake_start(void);
+void snake_stop(void);
+bool snake_process_record(uint16_t keycode, keyrecord_t *record);
+#endif
+
 bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
 
     if (process_record_user(keycode, record) != true) {
@@ -219,6 +227,22 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
     if (keycode == KC_BAT) {
         show_battery = record->event.pressed;
         return false;
+    }
+#endif
+
+#ifdef RGB_MATRIX_ENABLE
+    if (keycode == KC_SNAKE) {
+        if (record->event.pressed) {
+            if (snake_active) {
+                snake_stop();
+            } else {
+                snake_start();
+            }
+        }
+        return false;
+    }
+    if (snake_active) {
+        return snake_process_record(keycode, record);
     }
 #endif
 
@@ -329,9 +353,318 @@ void rgb_matrix_wls_indicator(void) {
 }
 #    endif
 
+// ---------- Snake game ----------
+// Toggled via KC_SNAKE (Fn+S). Play field is a 14x4 grid covering the number
+// row through the shift row. Arrow keys steer, ESC exits, Fn+S also exits.
+// On entry we switch the rgb_matrix effect to SOLID_COLOR+black so the rest
+// of the keyboard stays dark and doesn't fight the game paint; on exit we
+// restore the previous effect.
+
+#    define SNAKE_W 14
+#    define SNAKE_H 4
+#    define SNAKE_MAX_LEN 40
+#    define SNAKE_STEP_MS 180
+#    define SNAKE_MIN_STEP_MS 80
+
+typedef enum {
+    SNAKE_DIR_UP,
+    SNAKE_DIR_DOWN,
+    SNAKE_DIR_LEFT,
+    SNAKE_DIR_RIGHT,
+} snake_dir_t;
+
+typedef struct {
+    int8_t x;
+    int8_t y;
+} snake_pos_t;
+
+// LED index per grid cell. Derived from keyboard.json rgb_matrix.layout —
+// matrix rows alternate assignment direction, so the mapping is hardcoded.
+// -1 = wall (instant death).
+static const int8_t snake_grid[SNAKE_H][SNAKE_W] = {
+    // ` 1 2 3 4 5 6 7 8 9 0 - = BSP
+    { 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20 },
+    // Tab Q W E R T Y U I O P [ ] Bsl
+    { 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47 },
+    // Caps A S D F G H J K L ; ' # Enter
+    { 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51 },
+    // LSft ISO Z X C V B N M , . / RSft [wall]
+    { 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, -1 },
+};
+
+bool                snake_active     = false;
+static bool         snake_game_over  = false;
+static snake_pos_t  snake_body[SNAKE_MAX_LEN];
+static uint8_t      snake_length     = 0;
+static snake_dir_t  snake_dir        = SNAKE_DIR_RIGHT;
+static snake_dir_t  snake_dir_queued = SNAKE_DIR_RIGHT;
+static snake_pos_t  snake_food       = {0, 0};
+static uint32_t     snake_last_step  = 0;
+static uint32_t     snake_rand_state = 0xDEADBEEF;
+
+// Full RGB matrix state saved on entry so exit is a perfect restore.
+static uint8_t snake_saved_mode    = 0;
+static uint8_t snake_saved_hue     = 0;
+static uint8_t snake_saved_sat     = 0;
+static uint8_t snake_saved_val     = 0;
+static uint8_t snake_saved_speed   = 0;
+static bool    snake_saved_enabled = true;
+
+static uint8_t snake_rand(uint8_t max) {
+    snake_rand_state ^= snake_rand_state << 13;
+    snake_rand_state ^= snake_rand_state >> 17;
+    snake_rand_state ^= snake_rand_state << 5;
+    return max ? (uint8_t)(snake_rand_state % max) : 0;
+}
+
+static bool snake_cell_is_wall(int8_t x, int8_t y) {
+    if (x < 0 || x >= SNAKE_W || y < 0 || y >= SNAKE_H) return true;
+    return snake_grid[y][x] < 0;
+}
+
+static bool snake_cell_on_body(int8_t x, int8_t y) {
+    for (uint8_t i = 0; i < snake_length; i++) {
+        if (snake_body[i].x == x && snake_body[i].y == y) return true;
+    }
+    return false;
+}
+
+static void snake_place_food(void) {
+    for (uint8_t tries = 0; tries < 100; tries++) {
+        int8_t x = (int8_t)snake_rand(SNAKE_W);
+        int8_t y = (int8_t)snake_rand(SNAKE_H);
+        if (snake_cell_is_wall(x, y)) continue;
+        if (snake_cell_on_body(x, y)) continue;
+        snake_food.x = x;
+        snake_food.y = y;
+        return;
+    }
+    // Fallback: linear scan for any empty cell
+    for (int8_t y = 0; y < SNAKE_H; y++) {
+        for (int8_t x = 0; x < SNAKE_W; x++) {
+            if (!snake_cell_is_wall(x, y) && !snake_cell_on_body(x, y)) {
+                snake_food.x = x;
+                snake_food.y = y;
+                return;
+            }
+        }
+    }
+}
+
+void snake_start(void) {
+    // Only snapshot + switch rgb_matrix on the inactive → active transition.
+    // Restart-after-death also calls snake_start(); re-snapshotting there
+    // would clobber the original state with SOLID_COLOR/HSV(0,0,0) and make
+    // the eventual exit "restore" to black.
+    if (!snake_active) {
+        snake_saved_enabled = rgb_matrix_is_enabled();
+        snake_saved_mode    = rgb_matrix_get_mode();
+        snake_saved_hue     = rgb_matrix_get_hue();
+        snake_saved_sat     = rgb_matrix_get_sat();
+        snake_saved_val     = rgb_matrix_get_val();
+        snake_saved_speed   = rgb_matrix_get_speed();
+
+        if (!snake_saved_enabled) rgb_matrix_enable_noeeprom();
+        rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
+        rgb_matrix_sethsv_noeeprom(0, 0, 0);
+    }
+
+    snake_active     = true;
+    snake_game_over  = false;
+    snake_length     = 3;
+    snake_body[0]    = (snake_pos_t){8, 1};
+    snake_body[1]    = (snake_pos_t){7, 1};
+    snake_body[2]    = (snake_pos_t){6, 1};
+    snake_dir        = SNAKE_DIR_RIGHT;
+    snake_dir_queued = SNAKE_DIR_RIGHT;
+    snake_rand_state ^= timer_read32();
+    snake_place_food();
+    snake_last_step = timer_read32();
+}
+
+void snake_stop(void) {
+    snake_active    = false;
+    snake_game_over = false;
+
+    rgb_matrix_mode_noeeprom(snake_saved_mode);
+    rgb_matrix_sethsv_noeeprom(snake_saved_hue, snake_saved_sat, snake_saved_val);
+    rgb_matrix_set_speed_noeeprom(snake_saved_speed);
+    if (!snake_saved_enabled) rgb_matrix_disable_noeeprom();
+}
+
+static void snake_step(void) {
+    if (snake_game_over) return;
+    snake_dir = snake_dir_queued;
+
+    snake_pos_t new_head = snake_body[0];
+    switch (snake_dir) {
+        case SNAKE_DIR_UP:    new_head.y--; break;
+        case SNAKE_DIR_DOWN:  new_head.y++; break;
+        case SNAKE_DIR_LEFT:  new_head.x--; break;
+        case SNAKE_DIR_RIGHT: new_head.x++; break;
+    }
+
+    if (snake_cell_is_wall(new_head.x, new_head.y)) {
+        snake_game_over = true;
+        return;
+    }
+
+    bool ate = (new_head.x == snake_food.x && new_head.y == snake_food.y);
+    // The tail vacates unless we're about to grow.
+    uint8_t check_len = (ate || snake_length == 0) ? snake_length : (uint8_t)(snake_length - 1);
+    for (uint8_t i = 0; i < check_len; i++) {
+        if (snake_body[i].x == new_head.x && snake_body[i].y == new_head.y) {
+            snake_game_over = true;
+            return;
+        }
+    }
+
+    if (ate && snake_length < SNAKE_MAX_LEN) snake_length++;
+    for (int8_t i = (int8_t)snake_length - 1; i > 0; i--) {
+        snake_body[i] = snake_body[i - 1];
+    }
+    snake_body[0] = new_head;
+
+    if (ate) snake_place_food();
+}
+
+static void snake_tick(void) {
+    uint32_t delay = SNAKE_STEP_MS;
+    if (snake_length > 5) {
+        uint32_t accel = (uint32_t)(snake_length - 5) * 3;
+        uint32_t span  = SNAKE_STEP_MS - SNAKE_MIN_STEP_MS;
+        if (accel > span) accel = span;
+        delay = SNAKE_STEP_MS - accel;
+    }
+    if (timer_elapsed32(snake_last_step) >= delay) {
+        snake_last_step = timer_read32();
+        snake_step();
+    }
+}
+
+static void snake_paint_cell(int8_t x, int8_t y, uint8_t r, uint8_t g, uint8_t b,
+                             uint8_t led_min, uint8_t led_max) {
+    if (x < 0 || x >= SNAKE_W || y < 0 || y >= SNAKE_H) return;
+    int8_t led = snake_grid[y][x];
+    if (led < 0) return;
+    if ((uint8_t)led < led_min || (uint8_t)led >= led_max) return;
+    rgb_matrix_set_color((uint8_t)led, r, g, b);
+}
+
+// 0..255 triangle wave over `period_ms` milliseconds.
+static uint8_t snake_triangle(uint32_t period_ms) {
+    uint32_t half = period_ms / 2;
+    if (half == 0) return 0;
+    uint32_t t = timer_read32() % period_ms;
+    if (t < half) {
+        return (uint8_t)((t * 255) / half);
+    }
+    return (uint8_t)(((period_ms - t) * 255) / half);
+}
+
+static void snake_render(uint8_t led_min, uint8_t led_max) {
+    // Clear play area
+    for (int8_t y = 0; y < SNAKE_H; y++) {
+        for (int8_t x = 0; x < SNAKE_W; x++) {
+            snake_paint_cell(x, y, 0x00, 0x00, 0x00, led_min, led_max);
+        }
+    }
+
+    // Food: slow red breathe (0x60 .. 0xFF over ~1.2 s)
+    uint8_t food_pulse = snake_triangle(1200);
+    uint8_t food_r     = (uint8_t)(0x60 + ((uint16_t)food_pulse * 0x9F / 0xFF));
+    snake_paint_cell(snake_food.x, snake_food.y, food_r, 0x00, 0x00, led_min, led_max);
+
+    // Body: gradient from bright green near the head to dim green at the tail.
+    // On game over: dim red gradient, same shape.
+    for (uint8_t i = 1; i < snake_length; i++) {
+        int16_t val = 0xC0 - (int16_t)(i * 8);
+        if (val < 0x28) val = 0x28;
+        if (snake_game_over) {
+            snake_paint_cell(snake_body[i].x, snake_body[i].y, (uint8_t)val, 0x00, 0x00, led_min, led_max);
+        } else {
+            // Subtle cyan tint at the front fading to pure green at the tail,
+            // just enough to read the snake as having a "direction".
+            int16_t tint = 0x30 - (int16_t)(i * 4);
+            if (tint < 0) tint = 0;
+            snake_paint_cell(snake_body[i].x, snake_body[i].y, 0, (uint8_t)val, (uint8_t)tint, led_min, led_max);
+        }
+    }
+
+    // Head — painted last so it wins on overlap.
+    if (snake_length > 0) {
+        if (snake_game_over) {
+            // Fast orange pulse to sell "you died".
+            uint8_t p = snake_triangle(600);
+            uint8_t r = (uint8_t)(0x70 + ((uint16_t)p * 0x8F / 0xFF));
+            uint8_t g = (uint8_t)(0x18 + ((uint16_t)p * 0x28 / 0xFF));
+            snake_paint_cell(snake_body[0].x, snake_body[0].y, r, g, 0x00, led_min, led_max);
+        } else {
+            // Bright cyan-tinted green — distinct from body.
+            snake_paint_cell(snake_body[0].x, snake_body[0].y, 0x40, 0xFF, 0x80, led_min, led_max);
+        }
+    }
+}
+
+// Pass-through for modifier and layer keycodes so Fn (MO) stays functional
+// while the game is active — otherwise Fn+S could never fire to exit.
+static bool snake_is_passthrough(uint16_t keycode) {
+    if (keycode >= KC_LCTL && keycode <= KC_RGUI) return true;
+    if (keycode >= QK_MOMENTARY && keycode <= QK_MOMENTARY_MAX) return true;
+    if (keycode >= QK_TOGGLE_LAYER && keycode <= QK_TOGGLE_LAYER_MAX) return true;
+    if (keycode >= QK_TO && keycode <= QK_TO_MAX) return true;
+    if (keycode >= QK_ONE_SHOT_LAYER && keycode <= QK_ONE_SHOT_LAYER_MAX) return true;
+    if (keycode >= QK_DEF_LAYER && keycode <= QK_DEF_LAYER_MAX) return true;
+    if (keycode >= QK_LAYER_TAP && keycode <= QK_LAYER_TAP_MAX) return true;
+    if (keycode >= QK_MOD_TAP && keycode <= QK_MOD_TAP_MAX) return true;
+    if (keycode >= QK_ONE_SHOT_MOD && keycode <= QK_ONE_SHOT_MOD_MAX) return true;
+    return false;
+}
+
+bool snake_process_record(uint16_t keycode, keyrecord_t *record) {
+    if (snake_is_passthrough(keycode)) return true;
+    if (!record->event.pressed) return false;
+
+    if (snake_game_over) {
+        if (keycode == KC_ESC) {
+            snake_stop();
+        } else {
+            snake_start();
+        }
+        return false;
+    }
+
+    switch (keycode) {
+        case KC_UP:
+            if (snake_dir != SNAKE_DIR_DOWN) snake_dir_queued = SNAKE_DIR_UP;
+            break;
+        case KC_DOWN:
+            if (snake_dir != SNAKE_DIR_UP) snake_dir_queued = SNAKE_DIR_DOWN;
+            break;
+        case KC_LEFT:
+            if (snake_dir != SNAKE_DIR_RIGHT) snake_dir_queued = SNAKE_DIR_LEFT;
+            break;
+        case KC_RIGHT:
+            if (snake_dir != SNAKE_DIR_LEFT) snake_dir_queued = SNAKE_DIR_RIGHT;
+            break;
+        case KC_ESC:
+            snake_stop();
+            break;
+        default:
+            break;
+    }
+    return false;
+}
+
 bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
 
     bool continue_user_indicators = rgb_matrix_indicators_advanced_user(led_min, led_max);
+
+    if (snake_active) {
+        snake_tick();
+        snake_render(led_min, led_max);
+        return false;
+    }
 
     if (continue_user_indicators) {
         if (host_keyboard_led_state().caps_lock) {
