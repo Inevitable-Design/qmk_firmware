@@ -1,6 +1,36 @@
-# Womier SK87 — QMK firmware (with VIA, SignalRGB, battery indicator, and Snake)
+# Womier SK87 — QMK firmware (with VIA, SignalRGB, battery indicator, and Snake game)
 
 A fork of [`qmk/qmk_firmware`](https://github.com/qmk/qmk_firmware) that adds modern host-side integrations and quality-of-life features to the **Womier SK87** wireless 87-key TKL (WB32FQ95 MCU, 2.4 GHz + Bluetooth + USB).
+
+## ⚠️ Disclaimer — please read
+
+**TL;DR — the actual risk is very low.** The SK87's bootloader is in ROM and is *not* overwritten by a firmware flash. Holding **Esc** while plugging the keyboard in always drops you back into the WB32 DFU bootloader, even if the firmware on it is missing or broken. From there you can re-flash either this firmware *or* the stock Womier firmware using the same tool you used the first time ([QMK Toolbox](https://qmk.fm/toolbox) on Windows, or `wb32-dfu-updater_cli` on Linux). In other words: **you can always roll back.** This is not a one-way door.
+
+**Even so, the terms below govern your use of this firmware. Please read them before flashing:**
+
+- This is an **unofficial community fork**. It is not endorsed by, supported by, or affiliated with Womier in any way. The firmware here is provided **as-is**, with **no warranty** of any kind, express or implied.
+- **You alone are responsible** for what happens to your hardware. By downloading, building, flashing, or otherwise using anything in this repository, you accept all risk.
+- The maintainer and all contributors accept **no liability** for damage to your keyboard, computer, peripherals, data, or anything else, regardless of cause.
+- Flashing custom firmware **may void any manufacturer warranty** Womier offers on the device.
+- If any of the above makes you uncomfortable, do not flash this firmware.
+
+### Recovering / rolling back to stock — for beginners
+
+If something feels off after flashing (typing weird, lights wrong, keyboard not recognised), you don't need to panic — you go back to stock the same way you got here:
+
+1. **Unplug** the keyboard.
+2. **Hold the Esc key** and **plug the USB cable back in** — keep Esc held until the lights settle. The keyboard is now in the WB32 DFU bootloader (it won't type, that's expected).
+3. Open **QMK Toolbox** (Windows) or run `wb32-dfu-updater_cli -D <file>.hex` (Linux).
+4. Pick the **stock Womier firmware** (`.hex` from <https://womierkeyboard.com/pages/softwares>) — or any other build from this repo — and flash it.
+5. Unplug, plug back in normally. Done.
+
+The bootloader can't be erased by a normal flash, so this recovery path works even if the keyboard otherwise looks completely dead. (It would take a deliberate, rare misuse to actually brick the bootloader itself.)
+
+### Other practical notes
+
+- **Don't flash on low battery.** A wireless flash that gets interrupted by a dying battery is the one realistic way to corrupt things. Plug in via USB before flashing — the keyboard charges over USB anyway.
+- **Wireless pairings may need redoing.** After a flash, the saved BT/2.4 GHz pairings in EEPROM may be cleared, especially if you also do `EE_CLR` (Fn + Esc, recommended after this fork to register new keycodes). Just re-pair via the dongle / Bluetooth — takes a few seconds.
+- **Keep the stock `.hex` somewhere safe.** Even though you can re-download it from Womier's site, having a local copy means you can roll back without needing internet.
 
 ## Why this fork
 
@@ -11,7 +41,7 @@ The upstream Womier QMK fork targets an older QMK snapshot and ships **without**
 - **Adds VIA support** — live key remapping via [usevia.app](https://usevia.app/).
 - **Adds SignalRGB support** — full per-key RGB streaming from the [SignalRGB](https://signalrgb.com/) Windows app via the QMK community module.
 - **Adds a battery indicator** — hold **Fn + Space** in wireless mode to show battery level on F1–F10 as a 10-segment color-coded bar.
-- **Adds a Snake minigame** (snake branch only) — toggled with **Fn + S**, played on the LEDs with the arrow keys.
+- **Adds a Snake game** (snake branch only) — toggled with **Fn + S**, played on the LEDs with the arrow keys.
 - **Fixes wake/responsiveness bugs** — USB-on-wake reinitialisation, NKRO spin-wait removal, indicator pass ordering for stable battery bar rendering.
 
 ## Download pre-built firmware
@@ -21,7 +51,7 @@ Don't want to compile? Grab the latest `.hex` straight from the rolling releases
 | Branch                | Features                                        | Latest release                                                                                                                  |
 |-----------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
 | **`womier`**          | VIA + SignalRGB + battery + upstream-API fixes  | [![womier release](https://img.shields.io/github/v/release/Inevitable-Design/qmk_firmware?filter=latest-womier&label=latest-womier)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-womier) |
-| **`sk87-snake-wip`**  | everything in `womier` + Snake minigame (Fn+S) | [![snake release](https://img.shields.io/github/v/release/Inevitable-Design/qmk_firmware?filter=latest-sk87-snake-wip&label=latest-snake)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-sk87-snake-wip) |
+| **`sk87-snake-wip`**  | everything in `womier` + Snake game (Fn+S)     | [![snake release](https://img.shields.io/github/v/release/Inevitable-Design/qmk_firmware?filter=latest-sk87-snake-wip&label=latest-snake)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-sk87-snake-wip) |
 
 Each release contains:
 
@@ -55,8 +85,8 @@ Output: `.build/womier_sk87_default.hex`.
 | Document                                                                                                       | What it covers                                                                                  |
 |----------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
 | **[`BUILD.md`](BUILD.md)**                                                                                     | End-user compile + flash steps for Linux and Windows, including driver setup and post-flash.    |
-| **[`docs/womier_sk87_signalrgb.md`](docs/womier_sk87_signalrgb.md)**                                           | Deep-dive knowledge base: USB endpoint budget, `KEYBOARD_SHARED_EP`, upstream-API fixes, battery indicator, snake minigame, file-by-file change index. |
-| **[`keyboards/womier/sk87/readme.md`](keyboards/womier/sk87/readme.md)**                                       | User-facing change summary for the SK87 (Fn-layer keycodes, snake controls, etc.).              |
+| **[`docs/womier_sk87_signalrgb.md`](docs/womier_sk87_signalrgb.md)**                                           | Deep-dive knowledge base: USB endpoint budget, `KEYBOARD_SHARED_EP`, upstream-API fixes, battery indicator, Snake game, file-by-file change index. |
+| **[`keyboards/womier/sk87/readme.md`](keyboards/womier/sk87/readme.md)**                                       | User-facing change summary for the SK87 (Fn-layer keycodes, Snake game controls, etc.).         |
 | **[`keyboards/womier/sk87/signalrgb-plugin/README.md`](keyboards/womier/sk87/signalrgb-plugin/README.md)**     | Step-by-step SignalRGB host setup: install path per OS, settings, troubleshooting.              |
 
 ## SignalRGB plugin
@@ -73,7 +103,7 @@ Setup walkthrough: [`keyboards/womier/sk87/signalrgb-plugin/README.md`](keyboard
 |---------------------|------------------------------------------------------------------------------------------|
 | `master`            | Upstream `qmk/qmk_firmware` master + the original Womier additions, untouched.           |
 | `womier`            | Fork-specific work: VIA + SignalRGB + battery + upstream-API/wake/NKRO fixes.            |
-| `sk87-snake-wip`    | Everything in `womier` + the Snake minigame (Fn + S).                                    |
+| `sk87-snake-wip`    | Everything in `womier` + the Snake game (Fn + S).                                        |
 
 ## License
 
