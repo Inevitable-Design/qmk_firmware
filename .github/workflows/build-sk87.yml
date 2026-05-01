@@ -44,6 +44,10 @@ jobs:
           cp keyboards/womier/sk87/signalrgb-plugin/WomierSK87.js release/WomierSK87.js
           cp BUILD.md release/BUILD.md
           cp keyboards/womier/sk87/signalrgb-plugin/README.md release/SignalRGB-plugin-README.md
+          # Bundle everything into a single zip for one-click download.
+          apk add --no-cache zip 2>/dev/null || apt-get install -y zip 2>/dev/null || true
+          (cd release && zip -j "sk87-${BRANCH}-bundle.zip" \
+             "sk87-${BRANCH}.hex" WomierSK87.js BUILD.md SignalRGB-plugin-README.md)
           ls -la release/
           {
             echo "branch=${BRANCH}"
@@ -69,6 +73,7 @@ jobs:
 
             | File | What it is |
             |------|------------|
+            | `sk87-${{ steps.stage.outputs.branch }}-bundle.zip` | **One-click download** — everything below in a single zip. |
             | `sk87-${{ steps.stage.outputs.branch }}.hex` | Firmware binary — flash with [QMK Toolbox](https://qmk.fm/toolbox) or `wb32-dfu-updater_cli`. |
             | `WomierSK87.js` | SignalRGB host-side plugin. Drop in `%USERPROFILE%\Documents\WhirlwindFX\Plugins\` (Windows) or `~/Documents/WhirlwindFX/Plugins/` (mac/Linux). |
             | `BUILD.md` | Compile-from-source steps for Linux + Windows. |
@@ -76,6 +81,7 @@ jobs:
 
             See [`BUILD.md`](https://github.com/${{ github.repository }}/blob/${{ steps.stage.outputs.branch }}/BUILD.md) for full instructions, and post-flash run **Fn + Esc** (`EE_CLR`) to clear EEPROM so VIA picks up the new keycodes.
           files: |
+            release/sk87-${{ steps.stage.outputs.branch }}-bundle.zip
             release/sk87-${{ steps.stage.outputs.branch }}.hex
             release/WomierSK87.js
             release/BUILD.md
