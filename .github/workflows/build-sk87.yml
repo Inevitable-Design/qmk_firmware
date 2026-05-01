@@ -38,7 +38,7 @@ jobs:
         id: stage
         run: |
           BRANCH="${GITHUB_REF_NAME}"
-          SHORT_SHA="${GITHUB_SHA::7}"
+          SHORT_SHA=$(printf '%.7s' "${GITHUB_SHA}")
           mkdir -p release
           cp .build/womier_sk87_default.hex "release/sk87-${BRANCH}.hex"
           cp keyboards/womier/sk87/signalrgb-plugin/WomierSK87.js release/WomierSK87.js
