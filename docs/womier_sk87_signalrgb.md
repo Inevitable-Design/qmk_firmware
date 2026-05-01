@@ -214,7 +214,79 @@ Gated entirely behind `#ifdef WIRELESS_ENABLE`:
 
 ---
 
-## 7. Firmware size impact
+## 7. Snake minigame (Fn + S)
+
+A Snake game played on the keyboard's LEDs. Toggled via the new custom keycode `KC_SNAKE`, bound on **S** in both `WIN_FN` and `MAC_FN` layers.
+
+### Controls
+
+| Key          | Action                                                             |
+|--------------|--------------------------------------------------------------------|
+| **Fn + S**   | Enter or exit the game                                             |
+| **Arrows**   | Steer; 180° reversals are rejected to avoid self-kill on a mistap  |
+| **ESC**      | Exit immediately                                                   |
+| **Any key**  | Restart after game over                                            |
+
+Modifier and layer keycodes are passed through while the game is active so `Fn` (`MO(WIN_FN)`) still activates the Fn layer and `Fn + S` can always reach `KC_SNAKE` to exit. Every other keycode is consumed so arrow presses and typing don't leak to the host during play.
+
+### Play field — 14 cols × 4 rows
+
+The SK87's LED index order alternates direction per matrix row (routing-driven), so the grid is a hardcoded table derived from `keyboard.json`'s `rgb_matrix.layout`:
+
+```
+Row 0 (` 1 2 3 4 5 6 7 8 9 0 - = BSP):   LEDs 33 32 31 30 29 28 27 26 25 24 23 22 21 20
+Row 1 (Tab Q W E R T Y U I O P [ ] \):    LEDs 34 35 36 37 38 39 40 41 42 43 44 45 46 47
+Row 2 (Caps A S D F G H J K L ; ' # Ent): LEDs 64 63 62 61 60 59 58 57 56 55 54 53 52 51
+Row 3 (LSft ISO Z X C V B N M , . / RSft + [wall]):
+                                           LEDs 65 66 67 68 69 70 71 72 73 74 75 76 77 -1
+```
+
+`-1` means wall (instant death). The ISO LED (index 66) has no physical ANSI key but the LED still lights, so it's a valid cell. One wall cell pads the right edge of the shift row to keep the grid rectangular at 14 wide.
+
+### Render
+
+Painted from inside `rgb_matrix_indicators_advanced_kb`, which short-circuits all existing indicators (caps-lock LED, wls indicator, battery bar) while snake is active so those don't flicker through the game.
+
+- **Head** — bright cyan-green (`0x40, 0xFF, 0x80`), painted last so it wins on self-overlap.
+- **Body** — linear green gradient from bright near the head to dim at the tail; a subtle cyan tint near the head provides visual "direction".
+- **Food** — red, breathing `0x60 → 0xFF` over ~1.2 s via a triangle wave on `timer_read32()`.
+- **Game over** — head pulses orange/yellow at ~1.7 Hz, body goes dim red with the same gradient shape.
+
+### Game tick
+
+Advanced inside the indicator callback using `timer_elapsed32(snake_last_step) >= STEP_MS` as a gate, with `snake_last_step = timer_read32()` reset inside the gate. This is naturally idempotent even if QMK later enables `RGB_MATRIX_LED_PROCESS_LIMIT` (which would fire the indicator callback multiple times per frame).
+
+Step interval: 180 ms, lightly accelerating with length down to 80 ms minimum at ~40 segments.
+
+### State save / restore
+
+On the inactive → active transition, `snake_start` snapshots the full `rgb_matrix` state:
+
+- `rgb_matrix_is_enabled()`
+- `rgb_matrix_get_mode()`
+- `rgb_matrix_get_hue() / get_sat() / get_val()`
+- `rgb_matrix_get_speed()`
+
+It then forces `rgb_matrix_enable_noeeprom()`, switches to `RGB_MATRIX_SOLID_COLOR`, and sets HSV to `(0, 0, 0)` so the rest of the keyboard stays dark. On exit, `snake_stop` restores all six values exactly.
+
+Critical detail: the snapshot is gated by `if (!snake_active)`. Restart-after-death also calls `snake_start()`; re-snapshotting there would clobber the saved state with the game's own `SOLID_COLOR` + HSV(0,0,0), and the eventual exit would "restore" to invisible black. The guard makes the first snapshot sticky until the final exit.
+
+### Known limitation
+
+`modules/signalrgb/signalrgb.c:134` writes LED colors via `rgb_matrix_set_color` from the `raw_hid_receive` callback, outside the indicator pipeline. When SignalRGB is actively streaming, it can clobber the game's pixels between frames. Pause SignalRGB on the PC before playing for a clean display. Switching to `SOLID_COLOR`+black on entry reduces, but does not eliminate, the visible race.
+
+### Flash / RAM cost
+
+- Flash: +1.6 KB (49.8 → 51.4 KB)
+- RAM: ~200 B (40-segment body buffer, grid table, state)
+
+### Post-flash
+
+After flashing new firmware that adds `KC_SNAKE`, tap **Fn + Esc** (`EE_CLR`) once. VIA caches numeric keycode IDs in EEPROM; the reset makes it pick up the new keycode.
+
+---
+
+## 8. Firmware size impact
 
 Measured on the SK87 build, in order of accumulation:
 
@@ -224,12 +296,13 @@ Measured on the SK87 build, in order of accumulation:
 | + SignalRGB module              | 47.1 KB  |
 | + SignalRGB + VIA               | 49.9 KB  |
 | + Battery indicator             | 48.6 KB  |
+| + Battery + Snake minigame      | 50.2 KB  |
 
 Well within the WB32FQ95's flash budget.
 
 ---
 
-## 8. Known warnings / follow-ups
+## 9. Known warnings / follow-ups
 
 - **`FORCE_NKRO` deprecation warning** — current QMK prefers `NKRO_DEFAULT_ON`. The SK87's config should be migrated when touched again. Non-blocking.
 - **No `via.json`** — VIA falls back to the inferred keymap. A hand-authored `via.json` would give a nicer layer-and-macro UI in the VIA app but is not required for remapping.
@@ -237,7 +310,7 @@ Well within the WB32FQ95's flash budget.
 
 ---
 
-## 9. Building
+## 10. Building
 
 See [`BUILD.md`](../BUILD.md) at the repo root for full Linux + Windows compile and flash instructions, including toolchain install and post-flash setup. Pre-built `.hex` files are also published on [Releases](../../../releases).
 
@@ -252,16 +325,16 @@ Flash with the WB32 DFU bootloader — enter it by holding **Esc** while pluggin
 
 ---
 
-## 10. File-change index
+## 11. File-change index
 
-| File                                                  | Reason                                                        |
-|-------------------------------------------------------|---------------------------------------------------------------|
-| `.gitmodules`                                         | SignalRGB community module submodule                          |
-| `modules/signalrgb`                                   | New submodule pointer                                         |
-| `keyboards/womier/sk87/keyboard.json`                 | `via`/`modules`/`mousekey:false`, `KC_BAT` keycode            |
-| `keyboards/womier/sk87/rules.mk`                      | `KEYBOARD_SHARED_EP = yes`                                    |
-| `keyboards/womier/sk87/keymaps/default/keymap.c`      | `RGB_*` → `RM_*`, `KC_BAT` on Fn+Space                        |
-| `keyboards/womier/sk87/sk87.c`                        | Battery indicator, USB-wake fix, NKRO spin-wait removal       |
+| File                                                  | Reason                                                          |
+|-------------------------------------------------------|-----------------------------------------------------------------|
+| `.gitmodules`                                         | SignalRGB community module submodule                            |
+| `modules/signalrgb`                                   | New submodule pointer                                           |
+| `keyboards/womier/sk87/keyboard.json`                 | `via`/`modules`/`mousekey:false`, `KC_BAT` and `KC_SNAKE` keycodes |
+| `keyboards/womier/sk87/rules.mk`                      | `KEYBOARD_SHARED_EP = yes`                                      |
+| `keyboards/womier/sk87/keymaps/default/keymap.c`      | `RGB_*` → `RM_*`, `KC_BAT` on Fn+Space, `KC_SNAKE` on Fn+S      |
+| `keyboards/womier/sk87/sk87.c`                        | Battery indicator, USB-wake fix, NKRO spin-wait removal, snake minigame |
 | `keyboards/womier/sk87/readme.md`                     | User-facing change summary                                    |
 | `keyboards/womier/sk87/signalrgb-plugin/`             | Host-side SignalRGB plugin + setup README                     |
 | `keyboards/womier/common/wireless/lpwr_wb32.c`        | GPIO macros, `UART_RX_PAL_MODE` fallback                      |
