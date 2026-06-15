@@ -1,0 +1,92 @@
+name: Build SK87 firmware
+
+on:
+  push:
+    branches:
+      - womier
+      - sk87-snake-wip
+    paths:
+      - 'keyboards/womier/sk87/**'
+      - 'keyboards/womier/common/**'
+      - 'modules/signalrgb'
+      - '.github/workflows/build-sk87.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/qmk/qmk_cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Mark workspace as a safe git directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Compile firmware
+        run: |
+          export QMK_HOME="$GITHUB_WORKSPACE"
+          qmk compile -kb womier/sk87 -km default
+
+      - name: Stage release assets
+        id: stage
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          SHORT_SHA=$(printf '%.7s' "${GITHUB_SHA}")
+          mkdir -p release
+          cp .build/womier_sk87_default.hex "release/sk87-${BRANCH}.hex"
+          cp keyboards/womier/sk87/signalrgb-plugin/WomierSK87.js release/WomierSK87.js
+          cp BUILD.md release/BUILD.md
+          cp keyboards/womier/sk87/signalrgb-plugin/README.md release/SignalRGB-plugin-README.md
+          # Bundle everything into a single zip for one-click download.
+          apk add --no-cache zip 2>/dev/null || apt-get install -y zip 2>/dev/null || true
+          (cd release && zip -j "sk87-${BRANCH}-bundle.zip" \
+             "sk87-${BRANCH}.hex" WomierSK87.js BUILD.md SignalRGB-plugin-README.md)
+          ls -la release/
+          {
+            echo "branch=${BRANCH}"
+            echo "short_sha=${SHORT_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sk87-${{ steps.stage.outputs.branch }}-firmware
+          path: release/
+          retention-days: 90
+
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-${{ steps.stage.outputs.branch }}
+          name: SK87 firmware (${{ steps.stage.outputs.branch }} latest)
+          body: |
+            Automatically built `.hex` from the `${{ steps.stage.outputs.branch }}` branch at commit `${{ steps.stage.outputs.short_sha }}`.
+
+            **Files**
+
+            | File | What it is |
+            |------|------------|
+            | `sk87-${{ steps.stage.outputs.branch }}-bundle.zip` | **One-click download** — everything below in a single zip. |
+            | `sk87-${{ steps.stage.outputs.branch }}.hex` | Firmware binary — flash with [QMK Toolbox](https://qmk.fm/toolbox) or `wb32-dfu-updater_cli`. |
+            | `WomierSK87.js` | SignalRGB host-side plugin. Drop in `%USERPROFILE%\Documents\WhirlwindFX\Plugins\` (Windows) or `~/Documents/WhirlwindFX/Plugins/` (mac/Linux). |
+            | `BUILD.md` | Compile-from-source steps for Linux + Windows. |
+            | `SignalRGB-plugin-README.md` | Detailed SignalRGB setup walkthrough. |
+
+            See [`BUILD.md`](https://github.com/${{ github.repository }}/blob/${{ steps.stage.outputs.branch }}/BUILD.md) for full instructions, and post-flash run **Fn + Esc** (`EE_CLR`) to clear EEPROM so VIA picks up the new keycodes.
+          files: |
+            release/sk87-${{ steps.stage.outputs.branch }}-bundle.zip
+            release/sk87-${{ steps.stage.outputs.branch }}.hex
+            release/WomierSK87.js
+            release/BUILD.md
+            release/SignalRGB-plugin-README.md
+          make_latest: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
