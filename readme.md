@@ -52,8 +52,8 @@ All builds live on the [**Releases** page](https://github.com/Inevitable-Design/
 
 | Branch                | Features                                        | Latest release                                                                                                                  |
 |-----------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| **`master`**          | VIA + SignalRGB + battery + upstream-API fixes  | [![master release](https://img.shields.io/github/v/release/Inevitable-Design/qmk_firmware?filter=latest-master&label=latest-master)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-master) |
-| **`sk87-snake-game`**  | everything in `master` + Snake game (Fn+S)     | [![snake release](https://img.shields.io/github/v/release/Inevitable-Design/qmk_firmware?filter=latest-sk87-snake-game&label=latest-snake)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-sk87-snake-game) |
+| **`master`**          | VIA + SignalRGB + battery + upstream-API fixes  | [![Download](https://img.shields.io/badge/download-latest--master-2ea44f?logo=github)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-master) |
+| **`sk87-snake-game`**  | everything in `master` + Snake game (Fn+S)     | [![Download](https://img.shields.io/badge/download-latest--snake-2ea44f?logo=github)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-sk87-snake-game) |
 
 Each release contains:
 
@@ -64,6 +64,22 @@ Each release contains:
 - `SignalRGB-plugin-README.md`: SignalRGB setup walkthrough.
 
 > After flashing, tap **Fn + Esc** (`EE_CLR`) once. VIA caches numeric keycode IDs, so an EEPROM reset is needed for new custom keycodes (`KC_USB`, `KC_BAT`, `KC_SNAKE`, etc.) to bind correctly.
+
+## Flashing
+
+The SK87 uses a **WB32FQ95** MCU with the **WB32 DFU** bootloader (not standard `dfu-util`). Apart from that it follows QMK's normal flow; QMK's [official flashing guide](https://docs.qmk.fm/newbs_flashing) covers the general process.
+
+**1. Enter the bootloader.** Hold **Esc** while plugging in the USB cable (Bootmagic reset), or press a key bound to `QK_BOOT`. The keyboard stops typing and waits for a flash.
+
+**2. Flash the firmware.**
+
+- **QMK Toolbox (Windows/macOS, easiest):** install [QMK Toolbox](https://qmk.fm/toolbox), click **Open**, choose the downloaded `sk87-<branch>.hex`, then click **Flash**. On Windows, if the bootloader does not show up, install the WinUSB driver for `WB32 DFU` with [Zadig](https://zadig.akeo.ie/).
+- **Command line, a pre-built `.hex`:** `wb32-dfu-updater_cli -D sk87-<branch>.hex`
+- **Command line, building from source:** `qmk flash -kb womier/sk87 -km default`. QMK reads the board's `wb32-dfu` bootloader setting and flashes it automatically.
+
+**3. After flashing,** tap **Fn + Esc** (`EE_CLR`) once so VIA picks up the new keycodes.
+
+Full toolchain setup (Linux and Windows), driver install, and the `udev` rule are in **[`BUILD.md`](BUILD.md)**.
 
 ## Compile from source
 
