@@ -3,8 +3,8 @@ name: Build SK87 firmware
 on:
   push:
     branches:
-      - womier
-      - sk87-snake-wip
+      - master
+      - sk87-snake-game
     paths:
       - 'keyboards/womier/sk87/**'
       - 'keyboards/womier/common/**'

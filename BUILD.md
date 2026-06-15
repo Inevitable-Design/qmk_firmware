@@ -1,18 +1,17 @@
 # Building & flashing the Womier SK87 firmware
 
-This is a fork of [qmk_firmware](https://github.com/qmk/qmk_firmware) that adds VIA + SignalRGB support, a battery indicator on Fn + Space, and (on `sk87-snake-wip`) a Snake minigame to the **Womier SK87** wireless TKL.
+This is a fork of [qmk_firmware](https://github.com/qmk/qmk_firmware) that adds VIA + SignalRGB support, a battery indicator on Fn + Space, and (on `sk87-snake-game`) a Snake minigame to the **Womier SK87** wireless TKL.
 
-If you just want a `.hex` to flash, **download the latest pre-built firmware from [Releases](../../releases)** — the rolling tags `latest-womier` and `latest-snake` are auto-rebuilt on every push. You only need this guide if you want to compile from source.
+If you just want a `.hex` to flash, **download the latest pre-built firmware from [Releases](../../releases)**: the rolling tags `latest-master` and `latest-sk87-snake-game` are auto-rebuilt on every push. You only need this guide if you want to compile from source.
 
 ## Branches
 
 | Branch              | What it has                                                                       |
 |---------------------|-----------------------------------------------------------------------------------|
-| `master`            | Upstream QMK + the original Womier additions, untouched.                          |
-| `womier`            | + VIA, + SignalRGB module, + battery indicator, + upstream-API/wake/NKRO fixes.   |
-| `sk87-snake-wip`    | Everything in `womier` + the Snake minigame (Fn + S).                             |
+| `master`            | VIA + SignalRGB + battery indicator + upstream-API/wake/NKRO fixes, on QMK master.                          |
+| `sk87-snake-game`    | Everything in `master` plus the Snake minigame (Fn + S).                             |
 
-Pick `womier` for everyday use. Pick `sk87-snake-wip` if you want the game.
+Pick `master` for everyday use. Pick `sk87-snake-game` if you want the game.
 
 ---
 
@@ -49,7 +48,7 @@ Make sure `~/.local/bin` is on your `PATH` so `qmk` is callable.
 ```sh
 git clone --recursive https://github.com/Inevitable-Design/qmk_firmware.git qmk-womier
 cd qmk-womier
-git checkout womier            # or: git checkout sk87-snake-wip
+git checkout sk87-snake-game   # optional: Snake-game branch (master is the default)
 git submodule update --init --recursive
 ```
 
@@ -94,7 +93,7 @@ sudo udevadm control --reload-rules
 
 ### 1. Install QMK MSYS
 
-Download and run the QMK MSYS installer: **<https://msys.qmk.fm/>**. This bundles MSYS2, Python, the ARM cross-compiler, and the QMK CLI in one shot — no `apt`, no `pip`. Open **QMK MSYS** from the Start menu after install; commands below assume that shell.
+Download and run the QMK MSYS installer: **<https://msys.qmk.fm/>**. This bundles MSYS2, Python, the ARM cross-compiler, and the QMK CLI in one shot, no `apt`, no `pip`. Open **QMK MSYS** from the Start menu after install; commands below assume that shell.
 
 ### 2. Clone and init submodules
 
@@ -102,7 +101,7 @@ Download and run the QMK MSYS installer: **<https://msys.qmk.fm/>**. This bundle
 cd /d                          # or wherever you want it
 git clone --recursive https://github.com/Inevitable-Design/qmk_firmware.git qmk-womier
 cd qmk-womier
-git checkout womier            # or: git checkout sk87-snake-wip
+git checkout sk87-snake-game   # optional: Snake-game branch (master is the default)
 git submodule update --init --recursive
 ```
 
@@ -120,13 +119,13 @@ If you get a `Could not determine home directory` error, also set `USERPROFILE`:
 export USERPROFILE="C:/Users/$(whoami)"
 ```
 
-(This is a known quirk of QMK MSYS Python's `Path.home()` — Windows-style env vars don't always propagate into the MSYS shell.)
+(This is a known quirk of QMK MSYS Python's `Path.home()`; Windows-style env vars don't always propagate into the MSYS shell.)
 
 The output is at `.build/womier_sk87_default.hex`.
 
 ### 4. Flash with QMK Toolbox (recommended)
 
-1. Download **QMK Toolbox** from <https://qmk.fm/toolbox> and install. On first run it prompts to install drivers — let it.
+1. Download **QMK Toolbox** from <https://qmk.fm/toolbox> and install. On first run it prompts to install drivers; let it.
 2. If the bootloader doesn't enumerate, install the correct driver via [Zadig](https://zadig.akeo.ie/): in Zadig, **Options → List All Devices**, find `WB32 DFU` (or the unrecognized device that appears when the keyboard is in bootloader), and replace its driver with **WinUSB**.
 3. Put the keyboard into bootloader (hold **Esc** while plugging in USB). Toolbox shows `*** WB32 DFU device connected`.
 4. Click **Open**, pick `.build/womier_sk87_default.hex`, then click **Flash**.
@@ -145,13 +144,13 @@ wb32-dfu-updater_cli -D .build/womier_sk87_default.hex
 
 ## After flashing
 
-1. **Tap Fn + Esc once** (`EE_CLR`). This wipes the EEPROM — the new build adds custom keycodes (`KC_USB`, `KC_BAT`, `KC_SNAKE`, etc.) that VIA caches by numeric ID, so a fresh layout is needed for them to bind correctly.
+1. **Tap Fn + Esc once** (`EE_CLR`). This wipes the EEPROM; the new build adds custom keycodes (`KC_USB`, `KC_BAT`, `KC_SNAKE`, etc.) that VIA caches by numeric ID, so a fresh layout is needed for them to bind correctly.
 2. **(Optional) VIA:** open <https://usevia.app/> in Chrome/Edge, click **Authorize device**, pick the SK87. Remap any key live.
 3. **(Optional) SignalRGB:** install the host-side plugin per [`keyboards/womier/sk87/signalrgb-plugin/README.md`](keyboards/womier/sk87/signalrgb-plugin/README.md).
 
 ---
 
-## Bootloader entry — quick reference
+## Bootloader entry: quick reference
 
 | Method                    | How                                                                          |
 |---------------------------|------------------------------------------------------------------------------|
@@ -164,6 +163,6 @@ Both leave you in the WB32 DFU bootloader, which speaks the WB32-specific DFU pr
 
 ## Knowledge base
 
-- [`docs/womier_sk87_signalrgb.md`](docs/womier_sk87_signalrgb.md) — full deep-dive on what changed in this fork: USB endpoint budget, `KEYBOARD_SHARED_EP`, upstream-API breakage and fixes, battery indicator, snake minigame (where present), file-by-file change index.
-- [`keyboards/womier/sk87/readme.md`](keyboards/womier/sk87/readme.md) — short user-facing summary of features added.
-- [`keyboards/womier/sk87/signalrgb-plugin/README.md`](keyboards/womier/sk87/signalrgb-plugin/README.md) — host-side SignalRGB plugin install + settings.
+- [`docs/womier_sk87_signalrgb.md`](docs/womier_sk87_signalrgb.md): full deep-dive on what changed in this fork: USB endpoint budget, `KEYBOARD_SHARED_EP`, upstream-API breakage and fixes, battery indicator, snake minigame (where present), file-by-file change index.
+- [`keyboards/womier/sk87/readme.md`](keyboards/womier/sk87/readme.md): short user-facing summary of features added.
+- [`keyboards/womier/sk87/signalrgb-plugin/README.md`](keyboards/womier/sk87/signalrgb-plugin/README.md): host-side SignalRGB plugin install + settings.
