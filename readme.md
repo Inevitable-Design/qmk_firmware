@@ -41,7 +41,7 @@ The upstream Womier QMK fork targets an older QMK snapshot and ships **without**
 - **Adds VIA support**: live key remapping via [usevia.app](https://usevia.app/).
 - **Adds SignalRGB support**: full per-key RGB streaming from the [SignalRGB](https://signalrgb.com/) Windows app via the QMK community module.
 - **Adds a battery indicator**: hold **Fn + Space** in wireless mode to show battery level on F1–F10 as a 10-segment color-coded bar.
-- **Adds a Snake game** (snake branch only): toggled with **Fn + S**, played on the LEDs with the arrow keys.
+- **Adds a Snake game** (`sk87-snake-game` branch only): toggled with **Fn + S**, played on the LEDs with the arrow keys.
 - **Fixes wake/responsiveness bugs**: USB-on-wake reinitialisation, NKRO spin-wait removal, indicator pass ordering for stable battery bar rendering.
 
 ## Download pre-built firmware
@@ -52,8 +52,8 @@ All builds live on the [**Releases** page](https://github.com/Inevitable-Design/
 
 | Branch                | Features                                        | Latest release                                                                                                                  |
 |-----------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| **`womier`**          | VIA + SignalRGB + battery + upstream-API fixes  | [![womier release](https://img.shields.io/github/v/release/Inevitable-Design/qmk_firmware?filter=latest-womier&label=latest-womier)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-womier) |
-| **`sk87-snake-wip`**  | everything in `womier` + Snake game (Fn+S)     | [![snake release](https://img.shields.io/github/v/release/Inevitable-Design/qmk_firmware?filter=latest-sk87-snake-wip&label=latest-snake)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-sk87-snake-wip) |
+| **`master`**          | VIA + SignalRGB + battery + upstream-API fixes  | [![master release](https://img.shields.io/github/v/release/Inevitable-Design/qmk_firmware?filter=latest-master&label=latest-master)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-master) |
+| **`sk87-snake-game`**  | everything in `master` + Snake game (Fn+S)     | [![snake release](https://img.shields.io/github/v/release/Inevitable-Design/qmk_firmware?filter=latest-sk87-snake-game&label=latest-snake)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-sk87-snake-game) |
 
 Each release contains:
 
@@ -74,7 +74,7 @@ Quick path (assumes the toolchain is already installed):
 ```sh
 git clone --recursive https://github.com/Inevitable-Design/qmk_firmware.git qmk-womier
 cd qmk-womier
-git checkout womier            # or: git checkout sk87-snake-wip
+git checkout sk87-snake-game   # optional: Snake-game branch (master is the default)
 git submodule update --init --recursive
 export QMK_HOME="$PWD"
 qmk compile -kb womier/sk87 -km default
@@ -103,9 +103,8 @@ Setup walkthrough: [`keyboards/womier/sk87/signalrgb-plugin/README.md`](keyboard
 
 | Branch              | Purpose                                                                                  |
 |---------------------|------------------------------------------------------------------------------------------|
-| `master`            | Upstream `qmk/qmk_firmware` master + the original Womier additions, untouched.           |
-| `womier`            | Fork-specific work: VIA + SignalRGB + battery + upstream-API/wake/NKRO fixes.            |
-| `sk87-snake-wip`    | Everything in `womier` + the Snake game (Fn + S).                                        |
+| `master`            | VIA + SignalRGB + battery + upstream-API/wake/NKRO fixes, on QMK master.           |
+| `sk87-snake-game`    | Everything in `master` plus the Snake game (Fn + S).                                        |
 
 ## License
 
