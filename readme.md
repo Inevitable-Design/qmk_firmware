@@ -46,21 +46,23 @@ The upstream Womier QMK fork targets an older QMK snapshot and ships **without**
 
 ## Download pre-built firmware
 
-Don't want to compile? Grab the latest `.hex` straight from the rolling releases. Each release also includes the SignalRGB plugin and the docs in one zip bundle.
+Don't want to compile? Grab the latest firmware from the [**Releases**](https://github.com/Inevitable-Design/qmk_firmware/releases) page. **New here? Download `womier-sk87-bundle.zip` from the latest release, unzip it, and head to [Flashing](#flashing).** The bundle has the firmware plus the SignalRGB plugin and docs in one zip.
 
-All builds live on the [**Releases** page](https://github.com/Inevitable-Design/qmk_firmware/releases). Per-branch quick links:
+There are two builds:
 
-| Branch                | Features                                        | Latest release                                                                                                                  |
-|-----------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| **`master`**          | VIA + SignalRGB + battery + upstream-API fixes  | [![Download](https://img.shields.io/badge/download-latest--master-2ea44f?logo=github)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-master) |
-| **`sk87-snake-game`**  | everything in `master` + Snake game (Fn+S)     | [![Download](https://img.shields.io/badge/download-latest--snake-2ea44f?logo=github)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-sk87-snake-game) |
+| Build | Features | Download |
+|-------|----------|----------|
+| **Normal** (default) | VIA + SignalRGB + battery + upstream-API fixes | [![Download normal](https://img.shields.io/badge/download-normal-2ea44f?logo=github)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-master) |
+| **Snake game** (alternative) | everything in Normal, plus the Snake game (Fn+S) | [![Download snake](https://img.shields.io/badge/download-snake-blue?logo=github)](https://github.com/Inevitable-Design/qmk_firmware/releases/tag/latest-sk87-snake-game) |
 
-Each release contains:
+Most people want the **Normal** build, which is the default "Latest" release. Grab the **Snake game** build only if you want the Fn+S minigame.
 
-- **`sk87-<branch>-bundle.zip`**: one-click download with everything below.
-- `sk87-<branch>.hex`: firmware binary (flash with [QMK Toolbox](https://qmk.fm/toolbox) or `wb32-dfu-updater_cli`).
+Each release contains (the Snake build uses `womier-sk87-snake-game` in place of `womier-sk87`):
+
+- **`womier-sk87-bundle.zip`**: start here, one-click download with everything below.
+- `womier-sk87.hex`: the firmware binary you flash.
 - `WomierSK87.js`: SignalRGB host-side plugin. Drop in `%USERPROFILE%\Documents\WhirlwindFX\Plugins\` (Windows) or `~/Documents/WhirlwindFX/Plugins/` (mac/Linux).
-- `BUILD.md`: compile-from-source steps.
+- `BUILD.md`: compile-from-source and flashing steps.
 - `SignalRGB-plugin-README.md`: SignalRGB setup walkthrough.
 
 > After flashing, tap **Fn + Esc** (`EE_CLR`) once. VIA caches numeric keycode IDs, so an EEPROM reset is needed for new custom keycodes (`KC_USB`, `KC_BAT`, `KC_SNAKE`, etc.) to bind correctly.
@@ -73,8 +75,8 @@ The SK87 uses a **WB32FQ95** MCU with the **WB32 DFU** bootloader (not standard 
 
 **2. Flash the firmware.**
 
-- **QMK Toolbox (Windows/macOS, easiest):** install [QMK Toolbox](https://qmk.fm/toolbox), click **Open**, choose the downloaded `sk87-<branch>.hex`, then click **Flash**. On Windows, if the bootloader does not show up, install the WinUSB driver for `WB32 DFU` with [Zadig](https://zadig.akeo.ie/).
-- **Command line, a pre-built `.hex`:** `wb32-dfu-updater_cli -D sk87-<branch>.hex`
+- **QMK Toolbox (Windows/macOS, easiest):** install [QMK Toolbox](https://qmk.fm/toolbox), click **Open**, choose the downloaded `womier-sk87.hex` (Snake build: `womier-sk87-snake-game.hex`), then click **Flash**. On Windows, if the bootloader does not show up, install the WinUSB driver for `WB32 DFU` with [Zadig](https://zadig.akeo.ie/).
+- **Command line, a pre-built `.hex`:** `wb32-dfu-updater_cli -D womier-sk87.hex`
 - **Command line, building from source:** `qmk flash -kb womier/sk87 -km default`. QMK reads the board's `wb32-dfu` bootloader setting and flashes it automatically.
 
 **3. After flashing,** tap **Fn + Esc** (`EE_CLR`) once so VIA picks up the new keycodes.
